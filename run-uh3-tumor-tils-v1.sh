@@ -49,23 +49,11 @@ echo "|                                                            |"
 echo "+ ---------------------------------------------------------- +"
 echo
 
-
-if [ -z "$CUDA_VISIBLE_DEVICES" ]; then
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo "Warning: CUDA_VISIBLE_DEVICES environment variable is empty. We cannot use"
-    echo "         a GPU without this."
-    echo "         Please set CUDA_VISIBLE_DEVICES to use a GPU."
-    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-    echo
-fi
-
 tumor_output="$(realpath $1)"
 til_output="$(realpath $2)"
 analysis_output="$(realpath $3)"
 
 set -eu
-
-echo Foo
 
 # Return 0 exit code if the program is found. Non-zero otherwise.
 program_exists() {
@@ -79,18 +67,18 @@ if program_exists "singularity"; then
     container_runner="singularity"
 elif program_exists "docker"; then
     # attempt to use docker. it is potentially not usable because it requires sudo.
-    if ! (docker images); then
+    if ! (docker images 2> /dev/null); then
         echo "Error: we found 'docker' but we cannot use it. Please ensure you have"
-        echo "       the proper permissions to run docker."
-        echo "       As a test, try to run 'docker images'."
+        echo "       the proper permissions to run docker. We tried to find singularity"
+        echo "       first but we could not find it."
         exit 3
     fi
     container_runner="docker"
 else
     echo "Error: a container runner is not found!"
     echo "       We cannot run this code without a container runner."
-    echo "       We tried to find 'singularity' or 'docker' but neither is available."
-    echo "       To fix this, please install Docker or Singularity."
+    echo "       We tried to find 'singularity' and 'docker' but neither is available."
+    echo "       To fix this, please install Docker or Apptainer/Singularity."
     exit 4
 fi
 
