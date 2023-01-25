@@ -1,3 +1,9 @@
+# Data files.
+/data
+color-*
+prediction-*
+*.sif
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
