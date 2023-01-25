@@ -66,7 +66,7 @@ program_exists() {
 echo "Searching for a container runner..."
 echo "Checking whether Apptainer/Singularity or Docker is installed..."
 
-if program_exists "singularity2"; then
+if program_exists "singularity"; then
     container_runner="singularity"
     echo "Found Apptainer/Singularity!"
 elif program_exists "docker"; then
