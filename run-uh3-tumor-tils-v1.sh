@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
 #
-# This script runs BRCA tumor and TIL detection on a directory of whole slide images.
-# After tumor and TIL detection, the TIL-alignment pipeline is run.
+# This script runs the survival modeling for tumor-TIL data.
 #
-# To use the script, make sure that `singularity` is available on the command line.
-# Then pass the script a directory of slides and a directory in which to store outputs.
-# The directory of slides must only contain slides.
+# To use the script, make sure that `singularity` or `docker` is available on the
+# command line.
 #
 # Example:
 #
-#   CUDA_VISIBLE_DEVICES=0 bash run-uh3-brca-tumor-tils.sh path/to/slides/ outputs/
+#   bash run-uh3-tumor-tils-v1.sh tumor-output/ tils-output/ outputs/
 #
 # Author: Jakub Kaczmarzyk <jakub.kaczmarzyk@stonybrookmedicine.edu>
 
 set -e
 
-TILALIGN_VERSION="dev-01b6d430"
+TILALIGN_VERSION="85d8768cec7945b505557620a3d87dd54cd3e439"
 
 usage="usage: $(basename "$0") TUMOR_OUTPUT_DIR TIL_OUTPUT_DIR ANALYSIS_OUTPUT_DIR"
 
@@ -26,7 +24,7 @@ if [ "$#" -ne 3 ]; then
 fi
 
 # Get the version as a short git commit (or unknown).
-version=$(git rev-parse --short HEAD 2> /dev/null || echo unknown)
+version=$(git describe --always 2> /dev/null || echo unknown)
 
 echo "+ ---------------------------------------------------------- +"
 echo "|                                                            |"
@@ -49,6 +47,8 @@ echo "|                                                            |"
 echo "+ ---------------------------------------------------------- +"
 echo
 
+echo "Timestamp: $(date)"
+
 tumor_output="$(realpath $1)"
 til_output="$(realpath $2)"
 analysis_output="$(realpath $3)"
@@ -63,17 +63,24 @@ program_exists() {
 # We prefer to use singularity because if it is installed, it is (almost) definitely
 # usable. Docker, on the other hand, can be found on the command line but will not be
 # usable. For instance, users need to have sudo access to use docker.
-if program_exists "singularity"; then
+echo "Searching for a container runner..."
+echo "Checking whether Apptainer/Singularity or Docker is installed..."
+
+if program_exists "singularity2"; then
     container_runner="singularity"
+    echo "Found Apptainer/Singularity!"
 elif program_exists "docker"; then
+    echo "Could not find Apptainer/Singularity..."
+    echo "Found Docker!"
+    echo "Checking whether we have permission to use Docker..."
     # attempt to use docker. it is potentially not usable because it requires sudo.
-    if ! (docker images 2> /dev/null); then
+    if ! (docker images 2> /dev/null > /dev/null); then
         echo "Error: we found 'docker' but we cannot use it. Please ensure you have"
-        echo "       the proper permissions to run docker. We tried to find singularity"
-        echo "       first but we could not find it."
+        echo "       the proper permissions to run docker."
         exit 3
     fi
     container_runner="docker"
+    echo "We can use Docker!"
 else
     echo "Error: a container runner is not found!"
     echo "       We cannot run this code without a container runner."
@@ -82,6 +89,9 @@ else
     exit 4
 fi
 
+echo "Container runner: $container_runner"
+
+echo "Checking whether the input directories exist..."
 if [ ! -d "$tumor_output" ]; then
     echo "Error: tumor output directory not found. ${tumor_output}"
     exit 5
@@ -90,7 +100,6 @@ if [ ! -d "$til_output" ]; then
     echo "Error: TIL output directory not found. ${til_output}"
     exit 6
 fi
-
 
 mkdir -p "$analysis_output"
 
@@ -101,10 +110,6 @@ run_pipeline_in_singularity() {
     APPTAINER_CACHEDIR=$SINGULARITY_CACHEDIR
     export SINGULARITY_CACHEDIR
     export APPTAINER_CACHEDIR
-    SINGULARITY_TMPDIR=/dev/shm/$(whoami)/
-    APPTAINER_TMPDIR=$SINGULARITY_TMPDIR
-    export SINGULARITY_TMPDIR
-    export APPTAINER_TMPDIR
 
     # Run the TIL-align workflow.
     tilalign_container="tilalign_${TILALIGN_VERSION}.sif"
@@ -114,8 +119,9 @@ run_pipeline_in_singularity() {
     fi
 
     singularity exec \
-        --bind "$(realpath $tumor_output):/data/results-tumor:ro" \
-        --bind "$(realpath $til_output):/data/results-tils:ro" \
+        --bind "$tumor_output:/data/results-tumor:ro" \
+        --bind "$til_output:/data/results-tils:ro" \
+        --bind "$analysis_output:/data/results-tilalign:rw" \
         --contain \
         "$tilalign_container" \
             Rscript --vanilla \
@@ -127,37 +133,18 @@ run_pipeline_in_singularity() {
                     0.5 \
                     "" \
                     output.csv \
-            "/data/$(basename $analysis_output)" \
+                    "/data/results-tilalign/" \
                     true \
     | tee -a "$analysis_output/runtime.log"
 }
 
 run_pipeline_in_docker() {
-
-
-    # We bind /data10 because our data are symlinked and the actual files are in /data10.
-    # TODO: this will have to be changed in the production script.
-    docker run \
-        --user=$(id -u):$(id -g) \
-        --env TORCH_HOME="" \
-        --mount type=bind,source=/data10,destination=/data10,readonly \
-        --mount "type=bind,source=$slides_dir,destination=$slides_dir,readonly" \
-        --mount "type=bind,source=$til_output,destination=$til_output" \
-        --workdir "$(pwd)" \
-        "$wsinfer_container" run \
-            --wsi-dir "$slides_dir" \
-            --results-dir "$til_output" \
-            --model "inception_v4nobn" \
-            --weights "TCGA-TILs-v1" \
-            --num-workers "$WSINFER_NUM_WORKERS" \
-    | tee -a "$til_output/runtime.log"
-
     # Run the TIL-align workflow.
     tilalign_container="kaczmarj/tilalign:$TILALIGN_VERSION"
     docker run \
         --mount type=bind,source=$tumor_output,destination=/data/results-tumor,readonly \
         --mount type=bind,source=$til_output,destination=/data/results-tils,readonly \
-        --mount type=bind,source=$analysis_output,destination=$analysis_output \
+        --mount type=bind,source=$analysis_output,destination=/data/results-tilalign \
         --entrypoint Rscript \
         "$tilalign_container" \
             --vanilla \
@@ -169,13 +156,10 @@ run_pipeline_in_docker() {
             0.5 \
             "" \
             output.csv \
-            "/data/$(basename $tumor_output)" \
+            "/data/results-tilalign" \
             true \
     | tee -a "$analysis_output/runtime.log"
 }
-
-echo "Container runner: $container_runner"
-echo
 
 if [ "$container_runner" = "singularity" ]; then
     run_pipeline_in_singularity
@@ -187,4 +171,4 @@ else
     exit 7
 fi
 
-echo "Done."
+# echo "Done."
