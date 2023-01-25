@@ -30,7 +30,7 @@ if [ "$#" -ne 2 ]; then
 fi
 
 # Get the version as a short git commit (or unknown).
-version=$(git rev-parse --short HEAD 2> /dev/null || echo unknown)
+version=$(git describe --always 2> /dev/null || echo unknown)
 
 echo "+ ---------------------------------------------------------- +"
 echo "|                                                            |"
@@ -76,23 +76,35 @@ program_exists() {
 # We prefer to use singularity because if it is installed, it is (almost) definitely
 # usable. Docker, on the other hand, can be found on the command line but will not be
 # usable. For instance, users need to have sudo access to use docker.
+echo "Searching for a container runner..."
+echo "Checking whether Apptainer/Singularity or Docker is installed..."
+
 if program_exists "singularity"; then
     container_runner="singularity"
+    echo "Found Apptainer/Singularity!"
 elif program_exists "docker"; then
+    echo "Could not find Apptainer/Singularity..."
+    echo "Found Docker!"
+    echo "Checking whether we have permission to use Docker..."
     # attempt to use docker. it is potentially not usable because it requires sudo.
-    if ! (docker images 2> /dev/null); then
+    if ! (docker images 2> /dev/null > /dev/null); then
         echo "Error: we found 'docker' but we cannot use it. Please ensure you have"
-        echo "       the proper permissions to run docker. We tried to find singularity"
-        echo "       first but we could not find it."
+        echo "       the proper permissions to run docker."
         exit 3
     fi
+    container_runner="docker"
+    echo "We can use Docker!"
 else
     echo "Error: a container runner is not found!"
     echo "       We cannot run this code without a container runner."
-    echo "       We tried to find 'singularity' or 'docker' but neither is available."
-    echo "       To fix this, please install Docker or Singularity."
+    echo "       We tried to find 'singularity' and 'docker' but neither is available."
+    echo "       To fix this, please install Docker or Apptainer/Singularity."
     exit 4
 fi
+
+echo "Container runner: $container_runner"
+
+echo "Checking whether the input directories exist..."
 
 # Fail if the slides directory does not exist.
 if [ ! -d "$slides_dir" ]; then
@@ -116,10 +128,6 @@ run_pipeline_in_singularity() {
     APPTAINER_CACHEDIR=$SINGULARITY_CACHEDIR
     export SINGULARITY_CACHEDIR
     export APPTAINER_CACHEDIR
-    SINGULARITY_TMPDIR=/dev/shm/$(whoami)/
-    APPTAINER_TMPDIR=$SINGULARITY_TMPDIR
-    export SINGULARITY_TMPDIR
-    export APPTAINER_TMPDIR
 
     # Download WSInfer container if it does not exist.
     wsinfer_container="wsinfer_${WSINFER_VERSION}.sif"
@@ -167,19 +175,21 @@ run_pipeline_in_singularity() {
     fi
 
     singularity exec \
-        --bind "$(realpath $output_dir):/data" \
+        --bind "$tumor_output/model-outputs:/data/results-tumor:ro" \
+        --bind "$til_output/model-outputs:/data/results-tils:ro" \
+        --bind "$analysis_output:/data/results-tilalign:rw" \
         --contain \
         "$tilalign_container" \
             Rscript --vanilla \
                 /code/commandLineAlign.R \
                     inceptionv4 \
-                    "/data/results-tils/model-outputs" \
+                    "/data/results-tils" \
                     0.1 \
-                    "/data/results-tumor/model-outputs" \
+                    "/data/results-tumor" \
                     0.5 \
                     "" \
                     output.csv \
-            "/data/$(basename $tilalign_output)" \
+                    "/data/results-tilalign/" \
                     true \
     | tee -a "$tilalign_output/runtime.log"
 }
@@ -228,23 +238,23 @@ run_pipeline_in_docker() {
     # Run the TIL-align workflow.
     tilalign_container="kaczmarj/tilalign:$TILALIGN_VERSION"
     docker run \
-        --mount type=bind,source=$tumor_output,destination=/data/results-tumor,readonly \
-        --mount type=bind,source=$til_output,destination=/data/results-tils,readonly \
-        --mount type=bind,source=$tilalign_output,destination=$tilalign_output \
+        --mount type=bind,source=$tumor_output/model-outputs,destination=/data/results-tumor,readonly \
+        --mount type=bind,source=$til_output/model-outputs,destination=/data/results-tils,readonly \
+        --mount type=bind,source=$analysis_output,destination=/data/results-tilalign \
         --entrypoint Rscript \
         "$tilalign_container" \
             --vanilla \
             /code/commandLineAlign.R \
             inceptionv4 \
-            "/data/results-tils/model-outputs" \
+            "/data/results-tils" \
             0.1 \
-            "/data/results-tumor/model-outputs" \
+            "/data/results-tumor" \
             0.5 \
             "" \
             output.csv \
-            "/data/$(basename $tilalign_output)" \
+            "/data/results-tilalign" \
             true \
-    | tee -a "$tilalign_output/runtime.log"
+    | tee -a "$analysis_output/runtime.log"
 }
 
 echo "Container runner: $container_runner"
