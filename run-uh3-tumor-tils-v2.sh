@@ -13,10 +13,10 @@
 #
 # Author: Jakub Kaczmarzyk <jakub.kaczmarzyk@stonybrookmedicine.edu>
 
-set -e
+set -eu
 
 WSINFER_VERSION="0.3.5"
-TILALIGN_VERSION="dev-01b6d430"
+TILALIGN_VERSION="b5cd826"
 
 WSINFER_NUM_WORKERS="${WSINFER_NUM_WORKERS:-8}"  # Number of worker processes to use for data loading.
 WSINFER_BATCH_SIZE="${WSINFER_BATCH_SIZE:-8}"  # Batch size for every model forward pass.
@@ -66,8 +66,6 @@ fi
 slides_dir="$(realpath $1)"
 output_dir="$(realpath $2)"
 
-set -eu
-
 # Return 0 exit code if the program is found. Non-zero otherwise.
 program_exists() {
   hash "$1" 2>/dev/null;
@@ -115,8 +113,8 @@ fi
 # Prepare output directories.
 tumor_output="${output_dir}/results-tumor"
 til_output="${output_dir}/results-tils"
-tilalign_output="${output_dir}/results-tilalign/"
-mkdir -p "$tumor_output" "$til_output" "$tilalign_output"
+analysis_output="${output_dir}/results-tilalign-survival/"
+mkdir -p "$tumor_output" "$til_output" "$analysis_output"
 
 run_pipeline_in_singularity() {
     # We allow the output directory to exist because one might want to re-run the
@@ -191,7 +189,7 @@ run_pipeline_in_singularity() {
                     output.csv \
                     "/data/results-tilalign/" \
                     true \
-    | tee -a "$tilalign_output/runtime.log"
+    | tee -a "$analysis_output/runtime.log"
 }
 
 run_pipeline_in_docker() {
