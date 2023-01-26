@@ -7,7 +7,7 @@
 #
 # Example:
 #
-#   bash run-uh3-tumor-tils-v1.sh tumor-output/ tils-output/ outputs/
+#   bash run-v1.sh tumor-output/ tils-output/ outputs/
 #
 # Author: Jakub Kaczmarzyk <jakub.kaczmarzyk@stonybrookmedicine.edu>
 

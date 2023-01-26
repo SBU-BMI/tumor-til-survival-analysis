@@ -9,7 +9,7 @@
 #
 # Example:
 #
-#   CUDA_VISIBLE_DEVICES=0 bash run-uh3-brca-tumor-tils.sh path/to/slides/ outputs/
+#   CUDA_VISIBLE_DEVICES=0 bash run-v2.sh path/to/slides/ outputs/
 #
 # Author: Jakub Kaczmarzyk <jakub.kaczmarzyk@stonybrookmedicine.edu>
 
