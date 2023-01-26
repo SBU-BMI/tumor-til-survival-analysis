@@ -1,4 +1,4 @@
-# Survival analysios of tumor/TILs
+# Survival analysis of tumor/TILs
 
 This contains the shell scripts used to run survival analysis pipelines based on
 tumor/TIL distributions.
