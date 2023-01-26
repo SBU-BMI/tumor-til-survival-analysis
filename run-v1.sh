@@ -133,7 +133,20 @@ run_pipeline_in_singularity() {
                     output.csv \
                     "/data/results-tilalign/" \
                     true \
-    | tee -a "$analysis_output/runtime.log"
+                    "sampInfo.csv" \
+    | tee -a "$analysis_output/align_runtime.log"
+    
+    singularity exec \
+        --bind "$analysis_output:/data/results-tilalign:ro" \
+        --contain \
+        "$tilalign_container" \
+            Rscript --vanilla \
+                /code/renderWrapper.R \
+                    "/data/results-tilalign/output.csv" \
+                    "survivalA" \
+                    "censorA.0yes.1no" \
+                    "pdf_document" \
+     | tee -a "$analysis_output/analyze_runtime.log"
 }
 
 run_pipeline_in_docker() {
@@ -156,7 +169,21 @@ run_pipeline_in_docker() {
             output.csv \
             "/data/results-tilalign" \
             true \
-    | tee -a "$analysis_output/runtime.log"
+            "sampInfo.csv" \
+    | tee -a "$analysis_output/align_runtime.log"
+    
+    
+    docker run \
+        --mount type=bind, source=$analysis_output, destination=/data/results-tilalign,readonly \
+        --entrypoint Rscript \
+        "$tilalign_container" \
+            --vanilla \
+            /code/renderWrapper.R \
+            "/data/results-tilalign/output.csv" \
+            "survivalA" \
+            "censorA.0yes.1no" \
+            "pdf_document" \
+     | tee -a "$analysis_output/analyze_runtime.log"
 }
 
 if [ "$container_runner" = "singularity" ]; then
