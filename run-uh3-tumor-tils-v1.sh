@@ -11,9 +11,9 @@
 #
 # Author: Jakub Kaczmarzyk <jakub.kaczmarzyk@stonybrookmedicine.edu>
 
-set -e
+set -eu
 
-TILALIGN_VERSION="85d8768cec7945b505557620a3d87dd54cd3e439"
+TILALIGN_VERSION="b5cd826"
 
 usage="usage: $(basename "$0") TUMOR_OUTPUT_DIR TIL_OUTPUT_DIR ANALYSIS_OUTPUT_DIR"
 
@@ -52,8 +52,6 @@ echo "Timestamp: $(date)"
 tumor_output="$(realpath $1)"
 til_output="$(realpath $2)"
 analysis_output="$(realpath $3)"
-
-set -eu
 
 # Return 0 exit code if the program is found. Non-zero otherwise.
 program_exists() {
