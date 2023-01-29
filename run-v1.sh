@@ -7,19 +7,40 @@
 #
 # Example:
 #
-#   bash run-v1.sh tumor-output/ tils-output/ outputs/
+#   bash run-v1.sh tumor-output/ tils-output/ survival.csv outputs/
 #
 # Author: Jakub Kaczmarzyk <jakub.kaczmarzyk@stonybrookmedicine.edu>
 
 set -eu
 
-TILALIGN_VERSION="b5cd826"
+TILALIGN_VERSION="458bb04"
 
-usage="usage: $(basename "$0") TUMOR_OUTPUT_DIR TIL_OUTPUT_DIR ANALYSIS_OUTPUT_DIR"
+usage() {
+    cat << EOF
+usage: run-v1.sh TUMOR_OUTPUT_DIR TIL_OUTPUT_DIR SURVIVAL_CSV ANALYSIS_OUTPUT_DIR
 
-if [ "$#" -ne 3 ]; then
-    echo "Error: script requires three arguments"
-    echo "$usage"
+Learn survival models based on spatial characteristics of tumor and tumor-infiltrating
+lymphocytes (TILs). This depends on pre-existing tumor and TIL segmentations, as well
+as a CSV with survival information.
+
+The tumor and TIL segmentation outputs are files with the name 'prediction-SLIDE_ID',
+where SLIDE_ID is a unique ID for the slide. The rows in the survival CSV must have the
+same IDs. Each row should contain the information for one slide.
+
+Survival CSV sample:
+
+slideID,survivalA,censorA.0yes.1no
+001,1448,0
+002,1474,0
+003,4005,1
+
+Report bugs to: Jakub Kaczmarzyk <jakub.kaczmarzyk@stonybrookmedicine.edu>
+EOF
+}
+
+if [ "$#" -ne 4 ]; then
+    echo "Error: script requires four arguments"
+    usage
     exit 1
 fi
 
@@ -49,9 +70,10 @@ echo
 
 echo "Timestamp: $(date)"
 
-tumor_output="$(realpath $1)"
-til_output="$(realpath $2)"
-analysis_output="$(realpath $3)"
+tumor_output="$(realpath "$1")"
+til_output="$(realpath "$2")"
+survival_csv="$(realpath "$3")"
+analysis_output="$(realpath "$4")"
 
 # Return 0 exit code if the program is found. Non-zero otherwise.
 program_exists() {
@@ -80,7 +102,7 @@ elif program_exists "docker"; then
     container_runner="docker"
     echo "We can use Docker!"
 else
-    echo "Error: a container runner is not found!"
+    echo "Error: no container runner found!"
     echo "       We cannot run this code without a container runner."
     echo "       We tried to find 'singularity' and 'docker' but neither is available."
     echo "       To fix this, please install Docker or Apptainer/Singularity."
@@ -91,34 +113,40 @@ echo "Container runner: $container_runner"
 
 echo "Checking whether the input directories exist..."
 if [ ! -d "$tumor_output" ]; then
-    echo "Error: tumor output directory not found. ${tumor_output}"
+    echo "Error: tumor output directory not found: $tumor_output"
     exit 5
 fi
 if [ ! -d "$til_output" ]; then
-    echo "Error: TIL output directory not found. ${til_output}"
+    echo "Error: TIL output directory not found: $til_output"
     exit 6
+fi
+echo "Checking whether survival CSV exists..."
+if [ ! -f "$survival_csv" ]; then
+    echo "Error: survival CSV not found: $survival_csv"
+    exit 7
 fi
 
 mkdir -p "$analysis_output"
 
 run_pipeline_in_singularity() {
-
-    # TODO: what should we set as the CACHEDIR?
-    SINGULARITY_CACHEDIR=/dev/shm/$(whoami)/
+    SINGULARITY_CACHEDIR="${SINGULARITY_CACHEDIR:-/dev/shm/tumor-til-survival-analysis/}"
     APPTAINER_CACHEDIR=$SINGULARITY_CACHEDIR
     export SINGULARITY_CACHEDIR
     export APPTAINER_CACHEDIR
 
     # Run the TIL-align workflow.
     tilalign_container="tilalign_${TILALIGN_VERSION}.sif"
+    echo "Checking whether TIL-align container exists..."
     if [ ! -f "$tilalign_container" ]; then
         echo "Downloading TIL-align container"
         singularity pull docker://kaczmarj/tilalign:$TILALIGN_VERSION
     fi
 
+    echo "Running TIL-align pipeline..."
     singularity exec \
         --bind "$tumor_output:/data/results-tumor:ro" \
         --bind "$til_output:/data/results-tils:ro" \
+        --bind "$survival_csv:/data/sample_info.csv:ro" \
         --bind "$analysis_output:/data/results-tilalign:rw" \
         --contain \
         "$tilalign_container" \
@@ -133,16 +161,34 @@ run_pipeline_in_singularity() {
                     output.csv \
                     "/data/results-tilalign/" \
                     true \
-    | tee -a "$analysis_output/runtime.log"
+                    "/data/sample_info.csv" \
+    | tee -a "$analysis_output/tilalign.log"
+
+    echo "Running survival pipeline..."
+    singularity exec \
+        --bind "$analysis_output:/data:rw" \
+        --contain \
+        "$tilalign_container" \
+            Rscript --vanilla \
+                /code/renderWrapper.R \
+                    "/data/output.csv" \
+                    "survivalA" \
+                    "censorA.0yes.1no" \
+                    "pdf_document" \
+     | tee -a "$analysis_output/survival.log"
 }
 
 run_pipeline_in_docker() {
     # Run the TIL-align workflow.
     tilalign_container="kaczmarj/tilalign:$TILALIGN_VERSION"
+    echo "Running TIL-align pipeline..."
     docker run \
-        --mount type=bind,source=$tumor_output,destination=/data/results-tumor,readonly \
-        --mount type=bind,source=$til_output,destination=/data/results-tils,readonly \
-        --mount type=bind,source=$analysis_output,destination=/data/results-tilalign \
+        --rm \
+        --user "$(id -u)":"$(id -g)" \
+        --mount type=bind,source="$tumor_output",destination=/data/results-tumor,readonly \
+        --mount type=bind,source="$til_output",destination=/data/results-tils,readonly \
+        --mount type=bind,source="$analysis_output",destination=/data/results-tilalign \
+        --mount type=bind,source="$survival_csv",destination=/data/sample_info.csv,readonly \
         --entrypoint Rscript \
         "$tilalign_container" \
             --vanilla \
@@ -156,7 +202,23 @@ run_pipeline_in_docker() {
             output.csv \
             "/data/results-tilalign" \
             true \
-    | tee -a "$analysis_output/runtime.log"
+            "/data/sample_info.csv" \
+    | tee -a "$analysis_output/tilalign.log"
+
+    echo "Running survival pipeline..."
+    docker run \
+        --rm \
+        --user "$(id -u)":"$(id -g)" \
+        --mount type=bind,source="$analysis_output",destination=/data/ \
+        --entrypoint Rscript \
+        "$tilalign_container" \
+            --vanilla \
+            /code/renderWrapper.R \
+            "/data/output.csv" \
+            "survivalA" \
+            "censorA.0yes.1no" \
+            "pdf_document" \
+     | tee -a "$analysis_output/survival.log"
 }
 
 if [ "$container_runner" = "singularity" ]; then
@@ -169,4 +231,4 @@ else
     exit 7
 fi
 
-# echo "Done."
+echo "Wrote output to $analysis_output"
