@@ -95,8 +95,9 @@ elif program_exists "docker"; then
     echo "Checking whether we have permission to use Docker..."
     # attempt to use docker. it is potentially not usable because it requires sudo.
     if ! (docker images 2> /dev/null > /dev/null); then
-        echo "Error: we found 'docker' but we cannot use it. Please ensure you have"
-        echo "       the proper permissions to run docker."
+        echo "Error: we found 'docker' but we cannot use it. Please ensure that that"
+        echo "       Docker daemon is running and that you have the proper permissions"
+        echo "       to use 'docker'."
         exit 3
     fi
     container_runner="docker"
@@ -161,8 +162,7 @@ run_pipeline_in_singularity() {
                     output.csv \
                     "/data/results-tilalign/" \
                     true \
-                    "/data/sample_info.csv" \
-    | tee -a "$analysis_output/tilalign.log"
+                    "/data/sample_info.csv"
 
     echo "Running survival pipeline..."
     singularity exec \
@@ -174,8 +174,7 @@ run_pipeline_in_singularity() {
                     "/data/output.csv" \
                     "survivalA" \
                     "censorA.0yes.1no" \
-                    "pdf_document" \
-     | tee -a "$analysis_output/survival.log"
+                    "pdf_document"
 }
 
 run_pipeline_in_docker() {
@@ -202,8 +201,7 @@ run_pipeline_in_docker() {
             output.csv \
             "/data/results-tilalign" \
             true \
-            "/data/sample_info.csv" \
-    | tee -a "$analysis_output/tilalign.log"
+            "/data/sample_info.csv"
 
     echo "Running survival pipeline..."
     docker run \
@@ -217,8 +215,7 @@ run_pipeline_in_docker() {
             "/data/output.csv" \
             "survivalA" \
             "censorA.0yes.1no" \
-            "pdf_document" \
-     | tee -a "$analysis_output/survival.log"
+            "pdf_document"
 }
 
 if [ "$container_runner" = "singularity" ]; then
