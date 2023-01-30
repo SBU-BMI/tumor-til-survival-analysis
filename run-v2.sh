@@ -15,6 +15,9 @@
 
 set -eu
 
+echo "Error: this script is not yet ready to be run. Please do not use it."
+exit 1
+
 WSINFER_VERSION="0.3.5"
 TILALIGN_VERSION="b5cd826"
 
