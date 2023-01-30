@@ -13,7 +13,7 @@
 
 set -eu
 
-TILALIGN_VERSION="458bb04"
+TILALIGN_VERSION="df598d1"
 
 usage() {
     cat << EOF
