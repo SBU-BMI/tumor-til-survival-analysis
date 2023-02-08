@@ -13,7 +13,7 @@
 
 set -eu
 
-TILALIGN_VERSION="df598d1"
+TILALIGN_VERSION="0.1.0"
 
 usage() {
     cat << EOF
@@ -165,8 +165,16 @@ run_pipeline_in_singularity() {
                     "/data/sample_info.csv"
 
     echo "Running survival pipeline..."
+    # TODO: in singularity, /tmp is cleared if we use --contain. But we need a writable
+    # directory, so we copy the rmd into the host /tmp dir then mount /tmp to preserve
+    # our writable directory.
+    tmpdir=/tmp/rmarkdowndir
+    mkdir -p $tmpdir
+    singularity exec --bind /tmp:/tmp:rw "$tilalign_container" cp /code/Descriptive_Statistics.rmd "$tmpdir"
+
     singularity exec \
         --bind "$analysis_output:/data:rw" \
+        --bind /tmp:/tmp:rw \
         --contain \
         "$tilalign_container" \
             Rscript --vanilla \
