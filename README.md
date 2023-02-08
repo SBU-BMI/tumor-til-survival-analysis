@@ -8,19 +8,73 @@ tumor/TIL distributions.
 
 # `run-v1.sh` walkthrough
 
-`run-v1.sh` expects 4 arguments, the path to cancer predictions, the path to lymphocyte predictions, the path to a csv with survival information, and a folder path for outputs. The survival csv should take the format below:
+This script requires the use of `singularity`, `apptainer`, or `docker`. Please ensure
+one of these container runners is installed and usable.
 
-|slideID|censorA.0yes.1no|survivalA|ExtraCol1|etc|
-|----|----|----|----|----|
-|file1|0|234|entry1|entry1|
-|file2|1|122|entry2|entry2|
+## Usage
 
-When `run-v1.sh` is called, the cancer and lymphocyte predictions will be aligned and metrics will be generated. These data will then be automatically joined to the information provided in `sampInfo.csv`, and output will be written. The output is then automatically fed into the analytical portion of the pipeline, and a descriptive statistics document detailing invasion and survival is generated.
-
-A sample call of v1 would be
 ```
-bash run-v1.sh tumor-output/ tils-output/ survival.csv outputs/
+usage: run-v1.sh TUMOR_OUTPUT_DIR TIL_OUTPUT_DIR SURVIVAL_CSV ANALYSIS_OUTPUT_DIR
 ```
+
+The script `run-v1.sh` expects four positional arguments:
+
+1. the path to a directory with cancer predictions
+2. the path to a directory with lymphocyte predictions
+3. the path to a CSV file with survival information
+4. the path to an output directory to save pipeline outputs
+
+When `run-v1.sh` is called, the cancer and lymphocyte predictions will be aligned.
+These data will then be automatically joined to the information provided in `SURVIVAL_CSV`,
+and output will be written. The output is then automatically fed into the analytical
+portion of the pipeline, and a descriptive statistics document detailing invasion and
+survival is generated.
+
+## Example
+
+```bash
+bash run-v1.sh path/to/tumor-results path/to/til-results survival.csv outputs
+```
+
+At this time, we assume that each patient has only one slide. The slide IDs are assumed
+to be the slide filename minus the extension. For example, if a slide is named `ABC001.svs`,
+the slide ID is `ABC001`. The files within the tumor and TIL output directories must
+have the names `prediction-SLIDE_ID`.
+
+```
+path/to/tumor-outputs/
+├── prediction-TCGA-EW-A1OY-01Z-00-DX1
+├── prediction-TCGA-E9-A1NI-01Z-00-DX1
+├── prediction-TCGA-B6-A0I9-01Z-00-DX1
+└── prediction-TCGA-B6-A0I8-01Z-00-DX1
+```
+
+```
+path/to/til-outputs/
+├── prediction-TCGA-EW-A1OY-01Z-00-DX1
+├── prediction-TCGA-E9-A1NI-01Z-00-DX1
+├── prediction-TCGA-B6-A0I9-01Z-00-DX1
+└── prediction-TCGA-B6-A0I8-01Z-00-DX1
+```
+
+The survival CSV must have the following column names:
+
+- `slideID`
+    - The ID of the patient / slide (each patient is assumed to have a single slide).
+- `censorA.0yes.1no`
+    - If the patient is a deceased, this should be 1. If not, this should be 0.
+- `survivalA`
+    - Days.
+
+This is an example of the survival CSV (using the same slide IDs as above).
+
+|slideID|censorA.0yes.1no|survivalA|
+|----|----|----|
+|TCGA-EW-A1OY-01Z-00-DX1|0|908|
+|TCGA-E9-A1NI-01Z-00-DX1|0|300|
+|TCGA-B6-A0I9-01Z-00-DX1|1|362|
+|TCGA-B6-A0I8-01Z-00-DX1|1|749|
+
 
 # FAQs
 
