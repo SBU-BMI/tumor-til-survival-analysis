@@ -62,9 +62,10 @@ The survival CSV must have the following column names:
 - `slideID`
     - The ID of the patient / slide (each patient is assumed to have a single slide).
 - `censorA.0yes.1no`
-    - If the patient is a deceased, this should be 1. If not, this should be 0.
+    - If the patient is a deceased, this should be 1. If not, this should be 0. This
+    is right-censored data. Not censored means the patient had an event at this timepoint.
 - `survivalA`
-    - Days.
+    - Time of last followup in days. This is either days to death or days to censoring.
 
 This is an example of the survival CSV (using the same slide IDs as above).
 
