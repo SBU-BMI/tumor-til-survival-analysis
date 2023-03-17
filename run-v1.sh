@@ -93,11 +93,9 @@ can_use_docker=false
 if program_exists "singularity"; then
     echo "Found Apptainer/Singularity!"
     echo "Checking whether we have the ability to use Apptainer/Singularity..."
-    if (
-        img=$(mktemp --suffix=.sif) \
-        && singularity pull --force "$img" 'docker://alpine:3.12' 2> /dev/null > /dev/null \
-        && singularity run "$img" true && rm -f "$img"
-    ); then
+    if ( img=$(mktemp --suffix=.sif) \
+         && singularity pull --force "$img" 'docker://alpine:3.12' 2> /dev/null > /dev/null \
+         && singularity run "$img" true && rm -f "$img" ); then
         echo "We can use Apptainer/Singularity!"
         can_use_singularity=true
     else
