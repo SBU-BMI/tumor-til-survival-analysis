@@ -70,10 +70,25 @@ echo
 
 echo "Timestamp: $(date)"
 
-tumor_output="$(realpath "$1")"
-til_output="$(realpath "$2")"
-survival_csv="$(realpath "$3")"
-analysis_output="$(realpath "$4")"
+# Realpath implementations seem to differ between Linux and macOS.
+# This is a simple implementation to get the fullpath to a file or directory.
+_fullpath() {
+    [[ $1 = /* ]] && echo "$1" || echo "$PWD/${1#./}"
+}
+
+tumor_output="$(_fullpath "$1")"
+til_output="$(_fullpath "$2")"
+survival_csv="$(_fullpath "$3")"
+analysis_output="$(_fullpath "$4")"
+
+echo
+echo "Input arguments"
+echo "---------------"
+echo "Tumor directory: $tumor_output"
+echo "TIL directory: $til_output"
+echo "Survival CSV: $survival_csv"
+echo "Output directory: $analysis_output"
+echo
 
 # Return 0 exit code if the program is found. Non-zero otherwise.
 program_exists() {
