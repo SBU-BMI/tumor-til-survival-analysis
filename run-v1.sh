@@ -106,6 +106,7 @@ if program_exists "singularity"; then
     fi
 else
     echo "Could not find Apptainer/Singularity..."
+    container_runner="docker"
 fi
 
 if [ "$container_runner" = "docker" ]; then
