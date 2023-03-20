@@ -13,7 +13,7 @@
 
 set -eu
 
-TILALIGN_VERSION="0.1.0"
+TILALIGN_VERSION="ab8ac9e43034cfb352f2a03c43a0a9432e4d7de9"
 
 usage() {
     cat << EOF
@@ -70,10 +70,25 @@ echo
 
 echo "Timestamp: $(date)"
 
-tumor_output="$(realpath "$1")"
-til_output="$(realpath "$2")"
-survival_csv="$(realpath "$3")"
-analysis_output="$(realpath "$4")"
+# Realpath implementations seem to differ between Linux and macOS.
+# This is a simple implementation to get the fullpath to a file or directory.
+_fullpath() {
+    [[ $1 = /* ]] && echo "$1" || echo "$PWD/${1#./}"
+}
+
+tumor_output="$(_fullpath "$1")"
+til_output="$(_fullpath "$2")"
+survival_csv="$(_fullpath "$3")"
+analysis_output="$(_fullpath "$4")"
+
+echo
+echo "Input arguments"
+echo "---------------"
+echo "Tumor directory: $tumor_output"
+echo "TIL directory: $til_output"
+echo "Survival CSV: $survival_csv"
+echo "Output directory: $analysis_output"
+echo
 
 # Return 0 exit code if the program is found. Non-zero otherwise.
 program_exists() {
@@ -86,23 +101,49 @@ program_exists() {
 echo "Searching for a container runner..."
 echo "Checking whether Apptainer/Singularity or Docker is installed..."
 
+container_runner="singularity"
+can_use_singularity=false
+can_use_docker=false
+
 if program_exists "singularity"; then
-    container_runner="singularity"
     echo "Found Apptainer/Singularity!"
-elif program_exists "docker"; then
-    echo "Could not find Apptainer/Singularity..."
-    echo "Found Docker!"
-    echo "Checking whether we have permission to use Docker..."
-    # attempt to use docker. it is potentially not usable because it requires sudo.
-    if ! (docker images 2> /dev/null > /dev/null); then
-        echo "Error: we found 'docker' but we cannot use it. Please ensure that that"
-        echo "       Docker daemon is running and that you have the proper permissions"
-        echo "       to use 'docker'."
-        exit 3
+    echo "Checking whether we have the ability to use Apptainer/Singularity..."
+    if ( img=$(mktemp --suffix=.sif) \
+         && singularity pull --force "$img" 'docker://alpine:3.12' 2> /dev/null > /dev/null \
+         && singularity run "$img" true && rm -f "$img" ); then
+        echo "We can use Apptainer/Singularity!"
+        can_use_singularity=true
+    else
+        echo "Error: we found singularity/apptainer but we cannot pull and/or run"
+        echo "       singularity/apptainer images..."
+        echo "Trying Docker next..."
+        container_runner="docker"
     fi
-    container_runner="docker"
-    echo "We can use Docker!"
 else
+    echo "Could not find Apptainer/Singularity..."
+    container_runner="docker"
+fi
+
+if [ "$container_runner" = "docker" ]; then
+    if program_exists "docker" ; then
+        echo "Found Docker!"
+        echo "Checking whether we have permission to use Docker..."
+        # attempt to use docker. it is potentially not usable because it requires sudo.
+        if ! (docker images 2> /dev/null > /dev/null); then
+            echo "Error: we found 'docker' but we cannot use it. Please ensure that that"
+            echo "       Docker daemon is running and that you have the proper permissions"
+            echo "       to use 'docker'."
+            exit 3
+        fi
+        container_runner="docker"
+        can_use_docker=true
+        echo "We can use Docker!"
+    else
+        echo "Could not find Docker..."
+    fi
+fi
+
+if [ "$can_use_docker" != true ] && [ "$can_use_singularity" != true ]; then
     echo "Error: no container runner found!"
     echo "       We cannot run this code without a container runner."
     echo "       We tried to find 'singularity' and 'docker' but neither is available."
@@ -130,11 +171,16 @@ fi
 mkdir -p "$analysis_output"
 
 run_pipeline_in_singularity() {
-    SINGULARITY_CACHEDIR="${SINGULARITY_CACHEDIR:-/dev/shm/tumor-til-survival-analysis/}"
-    APPTAINER_CACHEDIR=$SINGULARITY_CACHEDIR
-    export SINGULARITY_CACHEDIR
-    export APPTAINER_CACHEDIR
-
+    # Only modify the cachedir if /dev/shm is writable.
+    if [ -w "/dev/shm/" ]; then
+        SINGULARITY_CACHEDIR="${SINGULARITY_CACHEDIR:-/dev/shm/tumor-til-survival-analysis/}"
+        APPTAINER_CACHEDIR=$SINGULARITY_CACHEDIR
+        echo "Setting apptainer/singularity cache directory variables..."
+        echo "    SINGULARITY_CACHEDIR=$SINGULARITY_CACHEDIR"
+        echo "    APPTAINER_CACHEDIR=$APPTAINER_CACHEDIR"
+        export SINGULARITY_CACHEDIR
+        export APPTAINER_CACHEDIR
+    fi
     # Run the TIL-align workflow.
     tilalign_container="tilalign_${TILALIGN_VERSION}.sif"
     echo "Checking whether TIL-align container exists..."
