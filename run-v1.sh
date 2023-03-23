@@ -13,7 +13,7 @@
 
 set -eu
 
-TILALIGN_VERSION="ab8ac9e43034cfb352f2a03c43a0a9432e4d7de9"
+TILALIGN_VERSION="31c69b4a0a478d42277fe871c173f0d1562b8f88"
 
 usage() {
     cat << EOF
