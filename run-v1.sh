@@ -13,7 +13,7 @@
 
 set -eu
 
-TILALIGN_VERSION="0361f84a49aac877c47c666ac2368c1573a51e81"
+TILALIGN_VERSION="1f0fc98590434fe7af1942d590c139ddc76fd09e"
 
 usage() {
     cat << EOF
@@ -168,6 +168,10 @@ if [ ! -f "$survival_csv" ]; then
     exit 7
 fi
 
+# Lung and prostate models include "subtypes" (in prostate, it is Gleason score).
+# We pass a true or false value to the til_align script.
+TUMOR_OUTPUT_HAS_SUBTYPES="${TUMOR_OUTPUT_HAS_SUBTYPES:-false}"
+
 mkdir -p "$analysis_output"
 
 run_pipeline_in_singularity() {
@@ -204,11 +208,12 @@ run_pipeline_in_singularity() {
                     0.1 \
                     "/data/results-tumor" \
                     0.5 \
-                    "" \
+                    "/data/sample_info.csv" \
                     output.csv \
                     "/data/results-tilalign/" \
                     true \
-                    "/data/sample_info.csv"
+                    "$TUMOR_OUTPUT_HAS_SUBTYPES"
+
 
     echo "Running survival pipeline..."
     # TODO: in singularity, /tmp is cleared if we use --contain. But we need a writable
@@ -251,11 +256,11 @@ run_pipeline_in_docker() {
             0.1 \
             "/data/results-tumor" \
             0.5 \
-            "" \
+            "/data/sample_info.csv" \
             output.csv \
             "/data/results-tilalign" \
             true \
-            "/data/sample_info.csv"
+            "$TUMOR_OUTPUT_HAS_SUBTYPES"
 
     echo "Running survival pipeline..."
     docker run \
